@@ -268,7 +268,7 @@ st.markdown(
 template_file = st.file_uploader("อัปโหลด template.xlsx", type=["xlsx"])
 day_files_uploaded = st.file_uploader(
     "อัปโหลดไฟล์ข้อมูลสแกนนิ้ว อย่างน้อย 1 ไฟล์ (.xlsx)",
-    type=["xls", "xlsx"],
+    type=["xlsx"],
     accept_multiple_files=True,
 )
 
