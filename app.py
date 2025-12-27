@@ -259,7 +259,7 @@ st.markdown(
     **ขั้นตอนการใช้งาน**
 
     1. อัปโหลดไฟล์ **template** (สรุปการทำงานประจำงวด) – ต้องเป็น `.xlsx`  
-    2. อัปโหลดไฟล์ **Day-by-Day** หลายไฟล์ได้ (`.xls` หรือ `.xlsx` เช่น `24.12.68.A.xls`, `24.12.68.G.xls`)  
+    2. อัปโหลดไฟล์ **Day-by-Day** หลายไฟล์ได้ (ต้องเป็น `.xlsx` เช่น `24.12.68.A.xlsx`, `24.12.68.G.xlsx`)  
     3. กด **Generate** เพื่อสร้างไฟล์สรุป `template_filled.xlsx` แล้วดาวน์โหลด
     """
 )
@@ -267,7 +267,7 @@ st.markdown(
 
 template_file = st.file_uploader("อัปโหลด template.xlsx", type=["xlsx"])
 day_files_uploaded = st.file_uploader(
-    "อัปโหลดไฟล์ข้อมูลสแกนนิ้ว อย่างน้อย 1 ไฟล์ (.xls / .xlsx)",
+    "อัปโหลดไฟล์ข้อมูลสแกนนิ้ว อย่างน้อย 1 ไฟล์ (.xlsx)",
     type=["xls", "xlsx"],
     accept_multiple_files=True,
 )
