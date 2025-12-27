@@ -1,7 +1,6 @@
 import os
 import re
 import pandas as pd
-import win32com.client as win32
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from shutil import copyfile
