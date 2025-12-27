@@ -17,94 +17,45 @@ ID_COL = 2                # column B in template (employee ID)
 FIRST_DATE_COL = 4        # column D in template (first date column)
 
 
-def convert_xls_to_xlsx(path: str) -> str:
-    """Convert .xls to .xlsx using Excel COM. Returns new .xlsx path."""
-    # ต้อง initialize COM ก่อนใช้ใน Streamlit
-    pythoncom.CoInitialize()
-    try:
-        excel = win32.DispatchEx("Excel.Application")
-        excel.Visible = False
-
-        wb = excel.Workbooks.Open(path)
-        xlsx_path = path + "x"  # e.g. 24.12.68.A.xls -> 24.12.68.A.xlsx
-        wb.SaveAs(xlsx_path, FileFormat=51)
-        wb.Close(SaveChanges=False)
-        excel.Quit()
-    finally:
-        # ปิด COM ทิ้ง
-        pythoncom.CoUninitialize()
-
-    return xlsx_path
-
-
-
 def load_day_file(path: str) -> pd.DataFrame:
-    """
-    Load one day-by-day file and return DataFrame with:
-    emp_id, name, time_in, time_out, late, no_in, no_out, absent, sick, personal, vacation, ordination
-    (some columns may be missing depending on file)
-    """
-    # If input is .xls, convert to .xlsx only if needed
-    if path.lower().endswith(".xls"):
-        xlsx_path = path + "x"   # e.g. 24.12.68.A.xls -> 24.12.68.A.xlsx
-
-        if not os.path.exists(xlsx_path):
-            print(f"Converting {path} -> {xlsx_path}")
-            xlsx_path = convert_xls_to_xlsx(path)
-        else:
-            print(f"Using existing converted file: {xlsx_path}")
-
-        df = pd.read_excel(xlsx_path, header=None)
-    else:
-        df = pd.read_excel(path, header=None)
+    # read xls with xlrd, xlsx with openpyxl (pandas auto-detects)
+    df = pd.read_excel(path, header=None)
 
     # keep only rows where first cell starts with ≥5 digits (employee rows)
     first_col = df[0].astype(str).str.strip()
     mask = first_col.str.match(r"^\d{5,}")
     df_emp = df[mask].copy()
 
-    # base columns
     rename_map = {
-        0: "emp_id",     # A
-        1: "name",       # B
-        4: "time_in",    # E
-        5: "time_out",   # F
+        0: "emp_id",
+        1: "name",
+        4: "time_in",
+        5: "time_out"
     }
 
-    # G = late minutes (optional)
     if 6 in df_emp.columns:
         rename_map[6] = "late"
 
-    # J..P = status codes (optional)
-    # J = 9, K = 10, L = 11, M = 12, N = 13, O = 14, P = 15
-    if 9 in df_emp.columns:
-        rename_map[9] = "no_in"        # ไม่ตอกเข้า
-    if 10 in df_emp.columns:
-        rename_map[10] = "no_out"      # ไม่ตอกออก
-    if 11 in df_emp.columns:
-        rename_map[11] = "absent"      # ขาดงาน
-    if 12 in df_emp.columns:
-        rename_map[12] = "sick"        # ลาป่วย
-    if 13 in df_emp.columns:
-        rename_map[13] = "personal"    # ลากิจ
-    if 14 in df_emp.columns:
-        rename_map[14] = "vacation"    # พักร้อน
-    if 15 in df_emp.columns:
-        rename_map[15] = "ordination"  # บวชคลอด
+    if 9 in df_emp.columns:  rename_map[9]  = "no_in"
+    if 10 in df_emp.columns: rename_map[10] = "no_out"
+    if 11 in df_emp.columns: rename_map[11] = "absent"
+    if 12 in df_emp.columns: rename_map[12] = "sick"
+    if 13 in df_emp.columns: rename_map[13] = "personal"
+    if 14 in df_emp.columns: rename_map[14] = "vacation"
+    if 15 in df_emp.columns: rename_map[15] = "ordination"
 
     df_emp = df_emp.rename(columns=rename_map)
 
     df_emp["emp_id"] = df_emp["emp_id"].astype(str).str.strip()
     df_emp["name"]   = df_emp["name"].astype(str).str.strip()
 
-    # build list of columns to return (only those that actually exist)
     cols = ["emp_id", "name", "time_in", "time_out"]
-    for extra in ["late", "no_in", "no_out", "absent", "sick",
-                  "personal", "vacation", "ordination"]:
+    for extra in ["late","no_in","no_out","absent","sick","personal","vacation","ordination"]:
         if extra in df_emp.columns:
             cols.append(extra)
 
     return df_emp[cols]
+
 
 
 def get_template_date_key_from_filename(path: str) -> str | None:
