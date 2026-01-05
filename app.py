@@ -91,6 +91,7 @@ def load_day_file(path: str) -> pd.DataFrame:
         0: "emp_id",
         1: "name",
         2: "date_raw",
+        3: "shift",
         4: "time_in",
         5: "time_out",
     }
@@ -238,60 +239,55 @@ def fill_template_from_days(template_path: str, day_files: list[str], output_pat
                 cell.value = str(time_in)
                 total_matches += 1
             else:
-                # no time-in: highlight yellow and add text
+                # no time-in
                 cell.fill = yellow_fill
 
-                # 1) comment overrides everything
-                comment_str = None
-                if "comment" in row.index and pd.notna(row["comment"]):
-                    comment_str = str(row["comment"]).strip()
-                    if not comment_str:
-                        comment_str = None
+                shift = str(row.get("shift", "")).upper().strip()
 
-                label_map = {
-                    "no_in":      "ไม่ตอกเข้า",
-                    "no_out":     "ไม่ตอกออก",
-                    "absent":     "ขาดงาน",
-                    "sick":       "ลาป่วย",
-                    "personal":   "ลากิจ",
-                    "vacation":   "พักร้อน",
-                    "ordination": "บวชคลอด",
-                }
+                # --- 1) OFF day → หยุดวันอาทิตย์ ---
+                if shift.startswith("OFF"):
+                    cell.value = "หยุดวันอาทิตย์"
 
-                pieces = []
-                if comment_str is None:
-                    # build from numeric reason columns
-                    for key, label in label_map.items():
-                        if key not in row.index:
-                            continue
-                        val = row[key]
-                        if pd.isna(val):
-                            continue
-                        try:
-                            num = float(val)
-                        except (TypeError, ValueError):
-                            continue
-                        if num == 0:
-                            continue
-
-                        if abs(num - round(num)) < 1e-6:
-                            num_str = str(int(round(num)))
-                        else:
-                            num_str = str(num)
-
-                        if num_str == "1":
-                            pieces.append(label)
-                        else:
-                            pieces.append(f"{label}({num_str})")
-
-                # choose final cell text
-                if comment_str:
-                    cell.value = comment_str
-                elif pieces:
-                    cell.value = " ".join(pieces)
                 else:
-                    # no comment & no specific status -> treat as ขาดงาน
-                    cell.value = "ขาดงาน"
+                    # --- 2) comment overrides everything ---
+                    comment_str = None
+                    if "comment" in row.index and pd.notna(row["comment"]):
+                        comment_str = str(row["comment"]).strip()
+                        if not comment_str:
+                            comment_str = None
+
+                    label_map = {
+                        "no_in": "ไม่ตอกเข้า",
+                        "no_out": "ไม่ตอกออก",
+                        "absent": "ขาดงาน",
+                        "sick": "ลาป่วย",
+                        "personal": "ลากิจ",
+                        "vacation": "พักร้อน",
+                        "ordination": "บวชคลอด",
+                    }
+
+                    pieces = []
+                    if comment_str is None:
+                        for key, label in label_map.items():
+                            if key not in row.index:
+                                continue
+                            val = row[key]
+                            if pd.isna(val):
+                                continue
+                            try:
+                                num = float(val)
+                            except (TypeError, ValueError):
+                                continue
+                            if num == 0:
+                                continue
+                            pieces.append(label if num == 1 else f"{label}({int(num)})")
+
+                    if comment_str:
+                        cell.value = comment_str
+                    elif pieces:
+                        cell.value = " ".join(pieces)
+                    else:
+                        cell.value = "ขาดงาน"
 
             # ---------- accumulate late minutes ----------
             if late_col_idx is not None and "late" in row.index:
