@@ -49,26 +49,46 @@ def parse_date_cell(x):
     except Exception:
         return None
 
+def normalize_emp_id(x):
+    if pd.isna(x):
+        return None
+
+    # If it's a number, keep only if it's an integer-like and long enough
+    if isinstance(x, (int,)):
+        s = str(x)
+        return s if re.fullmatch(r"\d{5,}", s) else None
+
+    if isinstance(x, (float,)):
+        # 5900102.0 -> keep as 5900102
+        if float(x).is_integer():
+            s = str(int(x))
+            return s if re.fullmatch(r"\d{5,}", s) else None
+        # 20.14 -> junk
+        return None
+
+    # Otherwise treat as string
+    s = str(x).strip()
+
+    # Handle "5900102.0" stored as text
+    m = re.fullmatch(r"(\d+)\.0", s)
+    if m:
+        s = m.group(1)
+
+    if re.fullmatch(r"\d{5,}", s):
+        return s
+
+    return None
+
 
 def load_day_file(path: str) -> pd.DataFrame:
-    """
-    Read the multi-day file (e.g. '26.11-25.12.2568.xlsx').
-
-    Cols (0-based):
-      0 = emp_id (first row of block, then blank) -> forward-filled
-      1 = name   (same)
-      2 = date string (26/11/2568, etc)
-      4 = time_in
-      5 = time_out
-      6 = late minutes
-      9..15 = reason counts (ไม่ตอกเข้า, ไม่ตอกออก, ขาดงาน, ลาป่วย, ลากิจ, พักร้อน, บวชคลอด)
-      16 = comment (Q)
-    """
     print(f"Loading day file: {path}")
     df = pd.read_excel(path, header=None)
 
-    # forward fill emp_id and name downwards
+    # 🔧 CLEAN emp_id column BEFORE ffill
+    df[0] = df[0].apply(normalize_emp_id)
     df[0] = df[0].ffill()
+
+    # forward fill name
     df[1] = df[1].ffill()
 
     # parse dates
@@ -332,7 +352,28 @@ def fill_template_from_days(template_path: str, day_files: list[str], output_pat
             for key, col in summary_cols.items():
                 if col is not None:
                     ws.cell(row=r, column=col).value = counts[key]
+    last_data_row = HEADER_ROW
 
+    for r in range(HEADER_ROW + 1, ws.max_row + 1):
+        emp_id = ws.cell(row=r, column=ID_COL).value
+        if emp_id not in (None, "", 0):
+            last_data_row = r
+            continue
+
+        # check if any non-zero / non-empty exists in the row
+        row_has_data = False
+        for c in range(1, ws.max_column + 1):
+            v = ws.cell(row=r, column=c).value
+            if v not in (None, "", 0):
+                row_has_data = True
+                break
+
+        if row_has_data:
+            last_data_row = r
+
+    # delete rows below last_data_row
+    if last_data_row < ws.max_row:
+        ws.delete_rows(last_data_row + 1, ws.max_row - last_data_row)
     wb.save(output_path)
     print("\nSaved filled template to:", output_path)
 
