@@ -24,8 +24,10 @@ def parse_date_cell(x):
     Convert various Excel / string values into a Python date.
     NO conversion between BE/CE: if the sheet says 2568, we keep 2568.
     """
-    if isinstance(x, (datetime, date)):
+    if isinstance(x, datetime):
         return x.date()
+    if isinstance(x, date):
+        return x
 
     if x is None:
         return None
@@ -34,10 +36,13 @@ def parse_date_cell(x):
     if not s:
         return None
 
-    # explicit dd/mm/yyyy
-    if re.match(r"^\d{2}/\d{2}/\d{4}$", s):
-        d, m, y = map(int, s.split("/"))
-        return date(y, m, d)
+    # explicit d/m/yyyy or dd/mm/yyyy
+    if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", s):
+        try:
+            d, m, y = map(int, s.split("/"))
+            return date(y, m, d)
+        except ValueError:
+            return None
 
     # fallback: let pandas try
     try:
@@ -83,6 +88,8 @@ def normalize_emp_id(x):
 def load_day_file(path: str) -> pd.DataFrame:
     print(f"Loading day file: {path}")
     df = pd.read_excel(path, header=None)
+    header_values = [str(v).strip().lower() for v in df.iloc[0].tolist()]
+    has_numbered_punch_columns = len(header_values) > 4 and header_values[3] == "1" and header_values[4] == "2"
 
     # 🔧 CLEAN emp_id column BEFORE ffill
     df[0] = df[0].apply(normalize_emp_id)
@@ -107,17 +114,26 @@ def load_day_file(path: str) -> pd.DataFrame:
     print("  unique employees in file:", df_emp[0].nunique())
 
     # rename useful columns
-    rename_map = {
-        0: "emp_id",
-        1: "name",
-        2: "date_raw",
-        3: "shift",
-        4: "time_in",
-        5: "time_out",
-    }
+    if has_numbered_punch_columns:
+        rename_map = {
+            0: "emp_id",
+            1: "name",
+            2: "date_raw",
+            3: "time_in",
+            4: "time_out",
+        }
+    else:
+        rename_map = {
+            0: "emp_id",
+            1: "name",
+            2: "date_raw",
+            3: "shift",
+            4: "time_in",
+            5: "time_out",
+        }
 
-    if 6 in df_emp.columns:   # late
-        rename_map[6] = "late"
+        if 6 in df_emp.columns:   # late
+            rename_map[6] = "late"
 
     # J..P reasons
     if 9 in df_emp.columns:   rename_map[9]  = "no_in"
@@ -414,8 +430,8 @@ st.markdown(
 
 template_file = st.file_uploader("อัปโหลด template.xlsx", type=["xlsx"])
 day_files_uploaded = st.file_uploader(
-    "อัปโหลดไฟล์ข้อมูลสแกนนิ้ว (Day-by-Day) อย่างน้อย 1 ไฟล์ (.xlsx)",
-    type=["xlsx"],
+    "อัปโหลดไฟล์ข้อมูลสแกนนิ้ว (Day-by-Day) อย่างน้อย 1 ไฟล์ (.xlsx, .xls)",
+    type=["xlsx", "xls"],
     accept_multiple_files=True,
 )
 
