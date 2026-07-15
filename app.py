@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime, date
+from datetime import datetime, date, time
 from shutil import copyfile
 from tempfile import TemporaryDirectory
 
@@ -85,11 +85,57 @@ def normalize_emp_id(x):
     return None
 
 
+def format_time_value(x):
+    if pd.isna(x):
+        return None
+
+    if isinstance(x, datetime):
+        return x.strftime("%H:%M")
+    if isinstance(x, time):
+        return x.strftime("%H:%M")
+
+    if isinstance(x, float) and 0 <= x < 1:
+        total_minutes = round(x * 24 * 60)
+        hours, minutes = divmod(total_minutes, 60)
+        return f"{hours:02d}:{minutes:02d}"
+
+    s = str(x).strip()
+    if not s or s.lower() in {"nan", "nat"}:
+        return None
+    return s
+
+
+def first_time_value(values):
+    for value in values:
+        formatted = format_time_value(value)
+        if formatted:
+            return formatted
+    return None
+
+
+def last_time_value(values):
+    for value in reversed(list(values)):
+        formatted = format_time_value(value)
+        if formatted:
+            return formatted
+    return None
+
+
+def format_work_time(time_in, time_out):
+    start = format_time_value(time_in)
+    end = format_time_value(time_out)
+
+    if start and end and start != end:
+        return f"{start}-{end}"
+    return start or end
+
+
 def load_day_file(path: str) -> pd.DataFrame:
     print(f"Loading day file: {path}")
     df = pd.read_excel(path, header=None)
     header_values = [str(v).strip().lower() for v in df.iloc[0].tolist()]
-    has_numbered_punch_columns = len(header_values) > 4 and header_values[3] == "1" and header_values[4] == "2"
+    numbered_punch_cols = [i for i in range(3, len(header_values)) if header_values[i].isdigit()]
+    has_numbered_punch_columns = len(numbered_punch_cols) >= 2 and numbered_punch_cols[0] == 3
 
     # 🔧 CLEAN emp_id column BEFORE ffill
     df[0] = df[0].apply(normalize_emp_id)
@@ -115,12 +161,12 @@ def load_day_file(path: str) -> pd.DataFrame:
 
     # rename useful columns
     if has_numbered_punch_columns:
+        df_emp["time_in"] = df_emp[numbered_punch_cols].apply(first_time_value, axis=1)
+        df_emp["time_out"] = df_emp[numbered_punch_cols].apply(last_time_value, axis=1)
         rename_map = {
             0: "emp_id",
             1: "name",
             2: "date_raw",
-            3: "time_in",
-            4: "time_out",
         }
     else:
         rename_map = {
@@ -165,7 +211,7 @@ def load_day_file(path: str) -> pd.DataFrame:
 def fill_template_from_days(template_path: str, day_files: list[str], output_path: str):
     """
     Copy template.xlsx to output_path and fill:
-      * per-day time_in in date columns
+      * per-day time_in-time_out in date columns
       * yellow highlight + text (reasons or comments) when no time_in
       * accumulate late minutes into 'สาย (นาที)'
       * final summary columns: ขาดงาน / ลาป่วย / ลากิจ / พักร้อน / บวชคลอด
@@ -268,11 +314,13 @@ def fill_template_from_days(template_path: str, day_files: list[str], output_pat
 
             cell = ws.cell(row=row_idx, column=col_idx)
             time_in = row.get("time_in", None)
+            time_out = row.get("time_out", None)
+            work_time = format_work_time(time_in, time_out)
 
             # ---------- choose text for that date cell ----------
-            if pd.notna(time_in):
-                # normal case: has time-in
-                cell.value = str(time_in)
+            if work_time:
+                # normal case: has work time
+                cell.value = work_time
                 total_matches += 1
             else:
                 # no time-in
@@ -341,7 +389,7 @@ def fill_template_from_days(template_path: str, day_files: list[str], output_pat
                             base = 0.0
                         ws.cell(row=row_idx, column=late_col_idx).value = base + add_val
 
-    print("Total cells filled with time_in:", total_matches)
+    print("Total cells filled with work time:", total_matches)
 
     # ---------- 4) Summary counts per person ----------
     if any(summary_cols.values()):
